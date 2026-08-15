@@ -1,0 +1,2 @@
+# Coordinates-Need-a-Ruler-Atomic-Coordinate-Tokens-and-a-Number-Token-Loss-for-Answer-Grounding
+A VLM can generate coordinates as decimal digits, but cross-entropy ignores numeric order: predicting 1 instead of 2 is penalized as much as predicting 9. We encode each coordinate as one of 1001 ordered tokens and add a Wasserstein-1 loss directly to the output softmax, preserving coordinate distance without an auxiliary head.
