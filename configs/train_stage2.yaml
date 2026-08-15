@@ -1,0 +1,64 @@
+# Stage 2 of 2 -- one more epoch at 1e-5, shorter warmup, dropout on.
+#
+#   llamafactory-cli train configs/train_stage2.yaml
+#
+# Continues the SAME adapter (create_new_adapter: false), so the rank stays 64
+# and stage 1's weights are the starting point rather than something to merge.
+#
+# Why the drop rather than four more epochs at 5e-4: this is the point at which
+# the model starts fitting the annotation noise instead of the geometry. Median
+# inter-worker box IoU on the labelled split is 0.77 for small regions, so there
+# is a real ceiling on how precisely "where the evidence stops" is defined, and
+# past it extra capacity goes into memorising individual annotators.
+#
+# Everything not listed here is inherited from stage 1 by being identical --
+# keep the two files in sync when you change the model or dataset block.
+
+### model
+model_name_or_path: Qwen/Qwen3.5-2B
+adapter_name_or_path: saves/qwen3_5-2b/coord_ntl_ms/stage1
+create_new_adapter: false
+image_max_pixels: 6553600
+video_max_pixels: 16384
+trust_remote_code: true
+new_special_tokens_config: configs/coord_tokens_desc.yaml
+init_special_tokens: desc_init
+resize_vocab: true
+
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_rank: 64
+lora_target: all
+lora_dropout: 0.05              # regularisation for the final epoch
+use_ntl_loss: true
+ntl_loss_weight: 1.0
+train_only_new_token_embeddings: true
+
+### dataset
+dataset_dir: data
+dataset: vizwiz_grounding_coord_ntl_ms
+template: qwen3_5_nothink
+cutoff_len: 6144
+preprocessing_num_workers: 16
+dataloader_num_workers: 3
+overwrite_cache: false
+
+### output
+output_dir: saves/qwen3_5-2b/coord_ntl_ms/stage2
+logging_steps: 10
+save_steps: 150
+plot_loss: true
+overwrite_output_dir: false
+report_to: none
+
+### train
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 32
+learning_rate: 1.0e-5
+num_train_epochs: 1.0
+lr_scheduler_type: cosine
+warmup_ratio: 0.03              # shorter: the adapter is already trained
+bf16: true
+ddp_timeout: 180000000

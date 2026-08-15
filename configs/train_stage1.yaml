@@ -1,0 +1,64 @@
+# Stage 1 of 2 -- four epochs at 5e-4.
+#
+#   llamafactory-cli train configs/train_stage1.yaml
+#
+# Run this from a LlamaFactory checkout that has been patched
+# (scripts/apply_llamafactory_patch.py), with the dataset registered in
+# LlamaFactory's data/dataset_info.json -- see configs/dataset_info.snippet.json.
+#
+# Three settings are the paper:
+#   new_special_tokens_config + init_special_tokens: desc_init   -> Eq. (1), (2)
+#   train_only_new_token_embeddings: true                        -> Eq. (3)
+#   use_ntl_loss + ntl_loss_weight                               -> Eq. (4)-(6)
+#
+# cutoff_len must scale with image_max_pixels. At 6553600 pixels the longest
+# no-think sequence measures ~5385 tokens; 6144 leaves ~14% headroom. Raising
+# the pixel budget without raising cutoff_len truncates the image tokens and
+# crashes inside the model's rotary-position code, several layers away from the
+# actual mistake.
+
+### model
+model_name_or_path: Qwen/Qwen3.5-2B
+image_max_pixels: 6553600
+video_max_pixels: 16384
+trust_remote_code: true
+new_special_tokens_config: configs/coord_tokens_desc.yaml
+init_special_tokens: desc_init
+resize_vocab: true
+
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_rank: 64
+lora_target: all
+use_ntl_loss: true
+ntl_loss_weight: 1.0            # lambda; 0.5 and 2.0 were also tried, 1.0 scored highest
+train_only_new_token_embeddings: true
+
+### dataset
+dataset_dir: data
+dataset: vizwiz_grounding_coord_ntl_ms
+template: qwen3_5_nothink
+cutoff_len: 6144
+preprocessing_num_workers: 16
+dataloader_num_workers: 3
+overwrite_cache: false
+
+### output
+output_dir: saves/qwen3_5-2b/coord_ntl_ms/stage1
+logging_steps: 10
+save_steps: 150
+plot_loss: true
+overwrite_output_dir: false
+report_to: none
+
+### train
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 32
+learning_rate: 5.0e-4
+num_train_epochs: 4.0
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+ddp_timeout: 180000000

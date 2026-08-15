@@ -1,0 +1,18 @@
+# Core -- enough to build the corpus, run the tests, and score a run.
+numpy>=1.24
+pillow>=10.0
+scikit-image>=0.22
+pyyaml>=6.0
+
+# Training and the loss/initialiser modules.
+torch>=2.1
+transformers>=4.50
+
+# Tests.
+pytest>=7.4
+
+# Not pinned here because their install is environment-specific; see the README:
+#   LlamaFactory 0.9.5.dev0   training + the ChatModel inference path
+#   vllm                      the inference backend the reported numbers use
+#   sam2                      the mask decoder
+#   opencv-python             optional; only for mining hard negative clicks

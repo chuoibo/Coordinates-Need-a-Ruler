@@ -1,0 +1,38 @@
+# Merge the trained adapter into a self-contained full model.
+#
+#   llamafactory-cli export configs/merge_lora.yaml
+#
+# Inference loads the merged model, not the adapter.
+#
+# new_special_tokens_config / init_special_tokens / resize_vocab are REQUIRED
+# here, and not just carried over out of habit: the base embedding has to be
+# resized to the adapter's shape *before* the merge, or the trained coordinate
+# rows have nowhere to land. They are written over the desc_init values during
+# the merge, so the initialisation choice does not survive into the export.
+#
+# Do not add a quantization_bit -- merging into a quantized base silently
+# degrades the merged weights.
+#
+# After exporting, check the merge did what it claims:
+#
+#   python scripts/verify_embedding_freeze.py \
+#       --merged <export_dir> --base Qwen/Qwen3.5-2B
+#
+# That asserts every vocabulary row outside the coordinate block is
+# bit-identical to the base model in both the input embedding and the output
+# head -- i.e. that Eq. (3) held and the export did not re-tie the two matrices.
+
+### model
+model_name_or_path: Qwen/Qwen3.5-2B
+adapter_name_or_path: saves/qwen3_5-2b/coord_ntl_ms/stage2
+template: qwen3_5_nothink
+trust_remote_code: true
+new_special_tokens_config: configs/coord_tokens_desc.yaml
+init_special_tokens: desc_init
+resize_vocab: true
+
+### export
+export_dir: checkpoints/qwen3_5_2b_coord_ntl
+export_size: 5
+export_device: cpu   # choices: [cpu, auto]
+export_legacy_format: false

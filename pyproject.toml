@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cnr"
+version = "1.0.0"
+description = "Coordinates Need a Ruler: atomic coordinate tokens and a number token loss for VizWiz answer grounding"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "Kiet La" }]
+keywords = ["answer grounding", "vision-language models", "coordinate tokenisation", "number token loss", "accessibility"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# The core -- tokenisation, dataset, crops, geometry, metrics -- runs on these
+# alone, so the tests are runnable on a laptop with no GPU stack. torch is an
+# extra because only the loss and the initialisers need it; LlamaFactory, vLLM
+# and SAM 2 are installed separately (see README).
+dependencies = [
+  "numpy>=1.24",
+  "pillow>=10.0",
+  "scikit-image>=0.22",
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+train = ["torch>=2.1", "transformers>=4.50"]
+dev = ["pytest>=7.4", "torch>=2.1", "transformers>=4.50"]
+
+[project.urls]
+Repository = "https://github.com/chuoibo/Coordinates-Need-a-Ruler"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"

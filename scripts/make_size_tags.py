@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+"""Derive the ``image_id,size_class`` table from ground-truth masks.
+
+    python scripts/make_size_tags.py --gt-dir data/gt \
+        --annotations data/test_grounding.json --out data/size_class_test.csv
+
+The table serves two different roles and it matters which one you are using:
+
+* as **reporting buckets** (``--bucket-csv`` at evaluation time) it never
+  touches the prompt and is simply how the small / medium / large split is
+  computed;
+* as a **prompt tag** (``--size-tag-csv`` at inference time) it is fed to the
+  model, and since it is derived from the ground-truth mask it is an *oracle*.
+
+The published bucket numbers were produced with the tag in the prompt. A
+deployed system would have to predict the tag instead. See the README.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import numpy as np
+from PIL import Image
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from cnr.crops import classify_size  # noqa: E402
+from cnr.metrics import expected_png_name  # noqa: E402
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--gt-dir", type=Path, required=True)
+    parser.add_argument("--annotations", type=Path, default=None)
+    parser.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args()
+
+    if args.annotations:
+        ids = sorted(json.loads(args.annotations.read_text(encoding="utf-8")).keys())
+    else:
+        ids = sorted(p.name for p in args.gt_dir.glob("*.png"))
+
+    rows, missing = [], 0
+    for image_id in ids:
+        png = args.gt_dir / expected_png_name(image_id)
+        if not png.exists():
+            missing += 1
+            continue
+        with Image.open(png) as im:
+            mask = np.asarray(im.convert("L")) > 0
+        fraction = float(mask.sum()) / mask.size if mask.size else 0.0
+        rows.append((image_id, classify_size(fraction), f"{fraction:.6f}"))
+
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(
+        "image_id,size_class,mask_area_frac\n" + "".join(f"{a},{b},{c}\n" for a, b, c in rows),
+        encoding="utf-8",
+    )
+    counts: dict[str, int] = {}
+    for _, cls, _ in rows:
+        counts[cls] = counts.get(cls, 0) + 1
+    print(f"wrote {args.out}: {len(rows)} rows ({missing} without a GT mask)")
+    print("mix:", {k: counts.get(k, 0) for k in ("small", "medium", "large")})
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

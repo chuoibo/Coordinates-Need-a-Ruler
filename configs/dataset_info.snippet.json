@@ -1,0 +1,12 @@
+{
+  "vizwiz_grounding_coord_ntl_ms": {
+    "file_name": "vizwiz_grounding/train_ms.json",
+    "formatting": "alpaca",
+    "columns": {
+      "prompt": "instruction",
+      "query": "input",
+      "response": "output",
+      "images": "images"
+    }
+  }
+}

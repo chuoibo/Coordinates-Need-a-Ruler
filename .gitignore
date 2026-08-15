@@ -216,3 +216,23 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---------------------------------------------------------------------------
+# Project
+# ---------------------------------------------------------------------------
+# Anchored with a leading slash so they match only at the repository root.
+# Unanchored, `data/` also swallows third_party/llamafactory/files/data/,
+# which is a vendored source file we very much do want tracked.
+
+# The VizWiz release is downloaded, not generated -- never commit it.
+/data/
+# Model weights live behind the download link in the README.
+/checkpoints/
+/saves/
+*.pt
+*.safetensors
+*.zip
+# Everything a run produces.
+/outputs/
+# LlamaFactory checkout, if cloned in place for the patch step.
+/LLaMA-Factory/

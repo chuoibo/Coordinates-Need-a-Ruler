@@ -1,0 +1,41 @@
+{
+  "llamafactory_version": "0.9.5.dev0",
+  "dest_root": "src/llamafactory",
+  "files": [
+    {
+      "path": "hparams/finetuning_args.py",
+      "sha256": "235480f639c35a551265e16763b7a6daf6e63a50b5261a839dc937a0b48b97b9",
+      "lines": 653
+    },
+    {
+      "path": "hparams/model_args.py",
+      "sha256": "804d5fff3d8814794c28614d3bcf07c2d2958de64e5f404fcfd279ed0079e9eb",
+      "lines": 613
+    },
+    {
+      "path": "model/model_utils/embedding.py",
+      "sha256": "1712bf51a68920fbb14b907ca81b0c978160883a32a59aa9ff5e666b796dbc43",
+      "lines": 296
+    },
+    {
+      "path": "train/trainer_utils.py",
+      "sha256": "21d65fc24f3cf029bd934fcf36d9fa74a9fae95b7e1688d251969e075fec531a",
+      "lines": 1132
+    },
+    {
+      "path": "train/callbacks.py",
+      "sha256": "1efef27c3c1c8f7f80afdb8a421460d0debb18bcc67cbbe0d1a16a30fe74afa2",
+      "lines": 450
+    },
+    {
+      "path": "train/sft/trainer.py",
+      "sha256": "58d4a557a3f72f6b43b3845949a06c5229ae0f7023269d4c8f658fabac3abd04",
+      "lines": 269
+    },
+    {
+      "path": "data/template.py",
+      "sha256": "2bff87d350f3059515cfe0096b58673e5e2c8c9bd32060b8cb71708c58445567",
+      "lines": 2373
+    }
+  ]
+}
