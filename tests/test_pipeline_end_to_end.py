@@ -93,6 +93,7 @@ def test_shipped_token_config_matches_a_fresh_build(tmp_path):
 def test_build_dataset_then_crops(corpus, tmp_path):
     root, grounding = corpus
     base = tmp_path / "base.json"
+    sizes = tmp_path / "sizes.csv"
 
     run(
         "build_dataset.py",
@@ -101,6 +102,7 @@ def test_build_dataset_then_crops(corpus, tmp_path):
         "--data-root", str(root),
         "--instruction", str(ROOT / "configs" / "instruction.txt"),
         "--out", str(base),
+        "--size-out", str(sizes),
     )
     records = json.loads(base.read_text(encoding="utf-8"))
     assert len(records) == N_IMAGES
@@ -109,16 +111,23 @@ def test_build_dataset_then_crops(corpus, tmp_path):
         assert set(record) == {"instruction", "input", "output", "images"}
         assert record["instruction"].startswith("<image>")
         assert "<coord_" in record["output"]
-        assert "Answer region size: " in record["input"]
+        assert record["input"].startswith("Question: ")
 
-    # every bucket is represented, so the crop plan is genuinely exercised
-    tags = {r["input"].rpartition("Answer region size: ")[2] for r in records}
-    assert tags == {"small", "medium", "large"}
+    # one prompt for the whole corpus, and it says nothing about the region
+    assert len({r["instruction"] for r in records}) == 1
+    assert "Answer region size" not in records[0]["instruction"]
+
+    # every bucket is represented in the side table, so the crop plan is
+    # genuinely exercised -- but the buckets live there, not in any record
+    rows = sizes.read_text(encoding="utf-8").strip().splitlines()
+    assert rows[0] == "image_path,size_class,mask_area_frac"
+    assert {line.split(",")[1] for line in rows[1:]} == {"small", "medium", "large"}
 
     out = tmp_path / "ms.json"
     result = run(
         "build_crops.py",
         "--base", str(base),
+        "--size-csv", str(sizes),
         "--data-root", str(root),
         "--image-out", str(tmp_path / "crops"),
         "--image-prefix", "crops",
@@ -145,18 +154,20 @@ def test_build_dataset_then_crops(corpus, tmp_path):
     for crop in crops:
         assert crop["images"][0].startswith("crops/")
         assert "<coord_" in crop["output"]
+        assert crop["instruction"] == records[0]["instruction"]
 
     # large records are never cropped
     parents = {m["parent_image"] for m in manifest}
-    large = {r["images"][0] for r in records if r["input"].endswith("large")}
-    assert parents.isdisjoint(large)
+    bucket_of = {line.split(",")[0]: line.split(",")[1] for line in rows[1:]}
+    large = {path for path, cls in bucket_of.items() if cls == "large"}
+    assert large and parents.isdisjoint(large)
 
 
-def test_make_size_tags_from_masks(corpus, tmp_path):
+def test_make_size_buckets_from_masks(corpus, tmp_path):
     root, grounding = corpus
     out = tmp_path / "size.csv"
     run(
-        "make_size_tags.py",
+        "make_size_buckets.py",
         "--gt-dir", str(root / "data" / "train"),
         "--annotations", str(grounding),
         "--out", str(out),
@@ -190,7 +201,7 @@ def test_evaluate_scores_a_prediction_file(corpus, tmp_path):
     pred_path.write_text(json.dumps(predictions), encoding="utf-8")
 
     size_csv = tmp_path / "size.csv"
-    run("make_size_tags.py", "--gt-dir", str(root / "data" / "train"),
+    run("make_size_buckets.py", "--gt-dir", str(root / "data" / "train"),
         "--annotations", str(grounding), "--out", str(size_csv))
 
     out_dir = tmp_path / "eval"

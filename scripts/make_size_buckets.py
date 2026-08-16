@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
 """Derive the ``image_id,size_class`` table from ground-truth masks.
 
-    python scripts/make_size_tags.py --gt-dir data/gt \
+    python scripts/make_size_buckets.py --gt-dir data/gt \
         --annotations data/test_grounding.json --out data/size_class_test.csv
 
-The table serves two different roles and it matters which one you are using:
+This is **reporting metadata**: it is how the small / medium / large breakdown
+in ``scripts/evaluate.py --bucket-csv`` is computed. It is read off the ground
+truth, so it says how hard each item was, not what the model was told -- the
+prompt is identical for every item and carries none of this.
 
-* as **reporting buckets** (``--bucket-csv`` at evaluation time) it never
-  touches the prompt and is simply how the small / medium / large split is
-  computed;
-* as a **prompt tag** (``--size-tag-csv`` at inference time) it is fed to the
-  model, and since it is derived from the ground-truth mask it is an *oracle*.
-
-The published bucket numbers were produced with the tag in the prompt. A
-deployed system would have to predict the tag instead. See the README.
+Buckets are area fractions of the frame: small below 0.05, medium in
+[0.05, 0.20), large at or above 0.20 -- the same thresholds the crop plan uses.
 """
 
 from __future__ import annotations

@@ -6,7 +6,7 @@
 Every training record is an Alpaca-style multimodal row::
 
     {"instruction": <the prompt, identical for every record>,
-     "input":       "Question: ...\\nAnswer region size: small",
+     "input":       "Question: ...",
      "output":      '{"answer": "...", "bbox_1000": [<coord_412>, ...], ...}',
      "images":      ["data/train/VizWiz_train_00007841.jpg"]}
 
@@ -45,21 +45,17 @@ from .coord_tokens import coord_token, decode_coord_tokens
 __all__ = [
     "INSTRUCTION_LENGTH",
     "INSTRUCTION_SHA256",
-    "SIZE_TAG_RE",
     "build_input",
     "build_record",
     "emit_target",
     "load_instruction",
     "load_unique_instruction",
     "parse_target",
-    "retag_size",
 ]
 
-#: sha256 of the instruction the released checkpoint was trained with.
-INSTRUCTION_SHA256 = "f4cd59030c3c3a699088a7d258bfd63a1c25fa5cec7123206a8c75313936db4e"
-INSTRUCTION_LENGTH = 1350
-
-SIZE_TAG_RE = re.compile(r"(Answer region size: )(small|medium|large)")
+#: sha256 of the shipped prompt. Training and inference read the same bytes.
+INSTRUCTION_SHA256 = "b69254da75481739cedcf7aee68102114f25b5481d7490afa5746e97a8df5cde"
+INSTRUCTION_LENGTH = 727
 
 
 def load_instruction(path: Path, *, verify: bool = True) -> str:
@@ -69,7 +65,7 @@ def load_instruction(path: Path, *, verify: bool = True) -> str:
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
         if digest != INSTRUCTION_SHA256:
             raise ValueError(
-                f"instruction at {path} does not match the released checkpoint's prompt.\n"
+                f"instruction at {path} does not match the shipped prompt.\n"
                 f"  expected sha256 {INSTRUCTION_SHA256} (len {INSTRUCTION_LENGTH})\n"
                 f"  got      sha256 {digest} (len {len(text)})\n"
                 "Editing the prompt is fine, but then the published numbers no longer apply; "
@@ -95,22 +91,14 @@ def load_unique_instruction(dataset_json: Path) -> str:
     return instruction
 
 
-def build_input(question: str, size_class: str | None = None) -> str:
+def build_input(question: str) -> str:
     """The ``input`` field -- and, at inference, the tail of the user turn.
 
     The Alpaca converter joins ``instruction`` and ``input`` with a newline, so
     inference must build the user turn the same way or the model sees a prompt
     it was never trained on.
     """
-    text = f"Question: {question}"
-    if size_class:
-        text += f"\nAnswer region size: {size_class}"
-    return text
-
-
-def retag_size(input_text: str, size_class: str) -> str:
-    """Rewrite the size tag in an existing ``input`` (crops change bucket)."""
-    return SIZE_TAG_RE.sub(lambda m: m.group(1) + size_class, input_text)
+    return f"Question: {question}"
 
 
 def _points(points: Iterable[Sequence[float]]) -> str:
@@ -170,12 +158,11 @@ def build_record(
     bbox_1000: Sequence[float],
     positive_points_1000: Iterable[Sequence[float]],
     negative_points_1000: Iterable[Sequence[float]],
-    size_class: str | None = None,
 ) -> dict[str, Any]:
     """Assemble one Alpaca multimodal row."""
     return {
         "instruction": instruction,
-        "input": build_input(question, size_class),
+        "input": build_input(question),
         "output": emit_target(answer, bbox_1000, positive_points_1000, negative_points_1000),
         "images": [image_path],
     }

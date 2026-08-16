@@ -13,16 +13,24 @@ from cnr.dataset import (
     load_instruction,
     load_unique_instruction,
     parse_target,
-    retag_size,
 )
 
 CONFIGS = Path(__file__).resolve().parents[1] / "configs"
 
 
-def test_shipped_instruction_matches_the_released_checkpoint():
+def test_shipped_instruction_matches_the_pinned_hash():
     instruction = load_instruction(CONFIGS / "instruction.txt")
     assert len(instruction) == INSTRUCTION_LENGTH
     assert instruction.startswith("<image>")
+
+
+def test_prompt_describes_only_the_output_contract():
+    """The prompt states the task and the coordinate format. Nothing in it is
+    conditioned on properties of the answer region."""
+    instruction = load_instruction(CONFIGS / "instruction.txt")
+    assert "bbox_1000" in instruction
+    assert "positive_points_1000" in instruction
+    assert "Answer region size" not in instruction
 
 
 def test_edited_instruction_is_rejected(tmp_path):
@@ -98,22 +106,17 @@ def test_parse_rejects_text_with_no_object():
         parse_target("I could not find the region.")
 
 
-def test_input_matches_the_trained_form():
+def test_input_is_the_question_and_nothing_else():
     assert build_input("What time is it?") == "Question: What time is it?"
-    assert build_input("What time is it?", "small") == "Question: What time is it?\nAnswer region size: small"
-
-
-def test_retag_size_rewrites_only_the_tag():
-    text = "Question: is it 5 small ones?\nAnswer region size: small"
-    assert retag_size(text, "large") == "Question: is it 5 small ones?\nAnswer region size: large"
 
 
 def test_build_record_shape():
     record = build_record(
-        "<image>\nprompt", "q?", "data/train/x.jpg", "yes", [1, 2, 3, 4], [[5, 6]], [[7, 8]], "medium"
+        "<image>\nprompt", "q?", "data/train/x.jpg", "yes", [1, 2, 3, 4], [[5, 6]], [[7, 8]]
     )
     assert set(record) == {"instruction", "input", "output", "images"}
     assert record["images"] == ["data/train/x.jpg"]
+    assert record["input"] == "Question: q?"
 
 
 def test_unique_instruction_guard(tmp_path):

@@ -3,14 +3,20 @@
 
     python scripts/build_crops.py \
         --base data/vizwiz_grounding/train_base.json \
+        --size-csv data/vizwiz_grounding/train_base_sizes.csv \
         --data-root . \
         --image-out data/crops/images \
         --out data/vizwiz_grounding/train_ms.json
 
 Reads the base corpus, emits ``rho``-zoomed crops for the small and medium
-records, re-expresses every coordinate in the crop frame, re-tags the size hint
-with the crop's *new* bucket, and writes base + crops as one file. The released
-corpus is 7,625 base + 3,209 crops = 10,834 records.
+records, re-expresses every coordinate in the crop frame, and writes base +
+crops as one file. The released corpus is 7,625 base + 3,209 crops = 10,834
+records.
+
+Which records get cropped comes from ``--size-csv``, the side table
+``scripts/build_dataset.py`` writes from the annotation masks. It is metadata
+about the corpus, not part of any record: the prompt is identical for every
+row, cropped or not.
 
 Images are opened with plain PIL and **no** ``exif_transpose``, which is what
 LlamaFactory feeds the model. A source image carrying a non-trivial orientation
@@ -27,6 +33,7 @@ never invent a replacement point.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sys
 from collections import Counter
@@ -45,7 +52,7 @@ from cnr.crops import (  # noqa: E402
     to_crop_1000,
     to_full_1000,
 )
-from cnr.dataset import emit_target, parse_target, retag_size  # noqa: E402
+from cnr.dataset import emit_target, parse_target  # noqa: E402
 
 EXIF_ORIENTATION_TAG = 274
 
@@ -115,15 +122,15 @@ def build_one(record: dict, rho: float, data_root: Path, image_out: Path, image_
     image_out.mkdir(parents=True, exist_ok=True)
     im.convert("RGB").crop(window.box).save(image_out / name, quality=95)
 
-    # The crop changes how much of the frame the region covers, so the size hint
-    # must be recomputed -- a small region at rho=2.0 is a medium one in its crop.
+    # Recorded in the manifest only: a small region at rho=2.0 covers a medium
+    # region's share of its crop, which is what the augmentation is for.
     area_scale = (width * height) / (w_c * h_c)
     old_frac = ((bbox[2] - bbox[0]) * (bbox[3] - bbox[1])) / 1_000_000
     new_class = classify_size(min(1.0, old_frac * area_scale))
 
     new_record = {
         "instruction": record["instruction"],
-        "input": retag_size(record["input"], new_class),
+        "input": record["input"],
         "output": emit_target(obj["answer"], new_bbox, positives, negatives),
         "images": [f"{image_prefix}/{name}"],
     }
@@ -143,6 +150,12 @@ def build_one(record: dict, rho: float, data_root: Path, image_out: Path, image_
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--base", type=Path, required=True)
+    parser.add_argument(
+        "--size-csv",
+        type=Path,
+        required=True,
+        help="image_path,size_class table from scripts/build_dataset.py --size-out",
+    )
     parser.add_argument("--data-root", type=Path, default=Path("."))
     parser.add_argument("--image-out", type=Path, default=Path("data/crops/images"))
     parser.add_argument("--image-prefix", default="data/crops/images", help="path recorded in the record")
@@ -156,10 +169,18 @@ def main() -> int:
     if args.limit:
         base = base[: args.limit]
 
+    with args.size_csv.open(encoding="utf-8") as handle:
+        bucket_of = {row["image_path"]: row["size_class"] for row in csv.DictReader(handle)}
+    missing = [r["images"][0] for r in base if r["images"][0] not in bucket_of]
+    if missing:
+        raise SystemExit(
+            f"{len(missing)} base records have no entry in {args.size_csv} "
+            f"(first: {missing[0]}). Re-run build_dataset.py with --size-out."
+        )
+
     jobs = []
     for record in base:
-        tag = record["input"].rpartition("Answer region size: ")[2].strip() or "large"
-        for rho in CROP_PLANS.get(tag, []):
+        for rho in CROP_PLANS[bucket_of[record["images"][0]]]:
             jobs.append((record, rho))
 
     crops, metas, skips = [], [], Counter()

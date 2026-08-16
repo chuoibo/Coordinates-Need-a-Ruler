@@ -4,7 +4,8 @@
     python scripts/build_dataset.py \
         --grounding data/train_grounding.json --split train \
         --grounding data/val_grounding.json   --split val \
-        --data-root . --out data/vizwiz_grounding/train_base.json
+        --data-root . --out data/vizwiz_grounding/train_base.json \
+        --size-out data/vizwiz_grounding/train_base_sizes.csv
 
 Training and validation are both folded in -- 6,494 + 1,131 = 7,625 records --
 because with the ablation rows each being the last checkpoint of a fixed epoch
@@ -12,7 +13,9 @@ budget there is nothing to hold out for. Add crops with
 ``scripts/build_crops.py`` to reach the 10,834 the released checkpoint saw.
 
 For each record the box and the clicks are read off the annotation mask (see
-:mod:`cnr.prompts`), and the size tag is the mask's own area fraction. Passing
+:mod:`cnr.prompts`). ``--size-out`` writes each record's region-size bucket to a
+side table; it is not part of the record, and the model never sees it. The crop
+builder reads it to decide which records to zoom and by how much. Passing
 ``--pred-mask-dir`` supplies first-pass decoder masks so the negative click can
 be mined from the decoder's own false positives; without it every record gets
 the background negative only, and 90.0% of the released corpus's hard negatives
@@ -67,6 +70,12 @@ def main() -> int:
     parser.add_argument("--instruction", type=Path, default=Path("configs/instruction.txt"))
     parser.add_argument("--pred-mask-dir", type=Path, default=None)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--size-out",
+        type=Path,
+        default=None,
+        help="side table of region-size buckets, for scripts/build_crops.py",
+    )
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args()
 
@@ -75,6 +84,7 @@ def main() -> int:
 
     instruction = load_instruction(args.instruction)
     records: list[dict] = []
+    sizes: list[tuple[str, str, float]] = []
     skipped: dict[str, int] = {}
 
     for grounding_path, split in zip(args.grounding, args.split):
@@ -90,26 +100,41 @@ def main() -> int:
             if not positives:
                 skipped["no_positive_click"] = skipped.get("no_positive_click", 0) + 1
                 continue
+            image_path = f"data/{split}/{image_id}"
             records.append(
                 build_record(
                     instruction=instruction,
                     question=str(entry["question"]),
-                    image_path=f"data/{split}/{image_id}",
+                    image_path=image_path,
                     answer=str(entry["most_common_answer"]),
                     bbox_1000=bbox,
                     positive_points_1000=positives,
                     negative_points_1000=negatives,
-                    size_class=classify_size(mask_area_fraction(mask)),
                 )
             )
+            fraction = mask_area_fraction(mask)
+            sizes.append((image_path, classify_size(fraction), fraction))
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(records, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"wrote {args.out}: {len(records)} records")
+
+    if args.size_out:
+        args.size_out.parent.mkdir(parents=True, exist_ok=True)
+        args.size_out.write_text(
+            "image_path,size_class,mask_area_frac\n"
+            + "".join(f"{a},{b},{c:.6f}\n" for a, b, c in sizes),
+            encoding="utf-8",
+        )
+        counts: dict[str, int] = {}
+        for _, cls, _ in sizes:
+            counts[cls] = counts.get(cls, 0) + 1
+        print(f"wrote {args.size_out}: " + str({k: counts.get(k, 0) for k in ("small", "medium", "large")}))
+
     if skipped:
         print("skipped:", skipped)
-    n_hard = sum(1 for r in records if r["output"].count("[[") and "negative_points_1000\": []" not in r["output"])
-    print(f"records carrying at least one negative click: {n_hard}")
+    n_neg = sum(1 for r in records if '"negative_points_1000": []' not in r["output"])
+    print(f"records carrying at least one negative click: {n_neg}")
     return 0
 
 

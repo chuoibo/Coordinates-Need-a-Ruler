@@ -3,6 +3,10 @@
 # Licensed under the MIT License; see LICENSE at the repository root.
 """Test-set generation with the trained checkpoint.
 
+The user turn is the prompt of :mod:`cnr.dataset` followed by the question,
+joined exactly as the Alpaca converter joins them during training. Nothing else
+is appended.
+
 Generation runs through LlamaFactory's own ``ChatModel`` so that the template,
 the tokenisation and the image preprocessing are the ones training used. Four
 settings are load-bearing, and each of them silently degrades the result rather
@@ -107,10 +111,15 @@ class InferenceItem:
     width: int
     height: int
     size_class: str | None = None
+    """Reporting bucket for this item. Not part of the prompt."""
 
 
 def load_size_classes(csv_path: Path) -> dict[str, str]:
-    """Read an ``image_id,size_class`` table."""
+    """Read an ``image_id,size_class`` table.
+
+    Used for **reporting only** -- it groups the results by region size. It
+    never reaches the model.
+    """
     import csv
 
     with Path(csv_path).open(encoding="utf-8") as handle:
@@ -118,17 +127,18 @@ def load_size_classes(csv_path: Path) -> dict[str, str]:
 
 
 def items_from_annotations(
-    annotations: Path, size_by_id: dict[str, str] | None
+    annotations: Path, bucket_by_id: dict[str, str] | None = None
 ) -> list[InferenceItem]:
+    """Read the evaluation set. ``bucket_by_id`` only labels items for reporting."""
     data = json.loads(Path(annotations).read_text(encoding="utf-8"))
-    size_by_id = size_by_id or {}
+    bucket_by_id = bucket_by_id or {}
     return [
         InferenceItem(
             image_id=image_id,
             question=str(entry["question"]),
             width=int(entry["width"]),
             height=int(entry["height"]),
-            size_class=size_by_id.get(image_id),
+            size_class=bucket_by_id.get(image_id),
         )
         for image_id, entry in data.items()
     ]
@@ -157,7 +167,7 @@ def generate(
     image_dir: Path,
     out_dir: Path,
     *,
-    size_by_id: dict[str, str] | None = None,
+    bucket_by_id: dict[str, str] | None = None,
     limit: int | None = None,
     resume: bool = False,
     failure_limit: int = 50,
@@ -173,7 +183,7 @@ def generate(
     out_dir.mkdir(parents=True, exist_ok=True)
     responses_path = out_dir / "responses.jsonl"
 
-    items = items_from_annotations(annotations, size_by_id)
+    items = items_from_annotations(annotations, bucket_by_id)
     if limit is not None:
         items = items[:limit]
     done = _already_done(responses_path) if resume else set()
@@ -186,7 +196,7 @@ def generate(
                 "instruction_len": len(instruction),
                 "n_items": len(items),
                 "n_pending": len(pending),
-                "size_tags": len(size_by_id or {}),
+                "reporting_buckets": len(bucket_by_id or {}),
                 "decoding": "greedy (do_sample=False)",
             },
             indent=2,
@@ -217,7 +227,7 @@ def generate(
         try:
             with Image.open(Path(image_dir) / item.image_id) as im:
                 image = (ImageOps.exif_transpose(im) if config.exif_transpose else im).convert("RGB")
-            content = f"{instruction}\n{build_input(item.question, item.size_class)}"
+            content = f"{instruction}\n{build_input(item.question)}"
             responses = chat_model.chat([{"role": "user", "content": content}], images=[image], **gen_kwargs)
             raw = responses[0].response_text if responses else ""
         except Exception as exc:  # noqa: BLE001 - one bad item must not kill the pass

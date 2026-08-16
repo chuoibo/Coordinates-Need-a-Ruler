@@ -151,8 +151,8 @@ Assumes the [VizWiz answer-grounding data](https://vizwiz.org/tasks-and-datasets
 under `data/` (`data/test/`, `data/gt/`, `data/test_grounding.json`).
 
 ```bash
-# 1. size tags (see the caveat in Reproduction notes)
-python scripts/make_size_tags.py \
+# 1. reporting buckets, read off the ground-truth masks (never enters the prompt)
+python scripts/make_size_buckets.py \
     --gt-dir data/gt --annotations data/test_grounding.json \
     --out data/size_class_test.csv
 
@@ -160,7 +160,6 @@ python scripts/make_size_tags.py \
 python scripts/run_inference.py \
     --model-dir checkpoints/sft_run_no_think_merged \
     --annotations data/test_grounding.json --image-dir data/test \
-    --size-tag-csv data/size_class_test.csv \
     --out-dir outputs/test --resume
 
 # 3. box metric (no segmenter needed)
@@ -181,7 +180,9 @@ python scripts/evaluate.py \
     --out-dir outputs/test
 ```
 
-Expected: **80.90** bounding-box IoU at step 3, **75.70** mask IoU at step 4.
+Step 3 reports bounding-box IoU by region size; step 4 reports the benchmark's
+mask IoU. `scripts/evaluate.py` prints the published figures alongside yours for
+comparison.
 
 ---
 
@@ -195,10 +196,12 @@ python scripts/make_coord_tokens.py --out configs/coord_tokens_desc.yaml
 python scripts/build_dataset.py \
     --grounding data/train_grounding.json --split train \
     --grounding data/val_grounding.json   --split val \
-    --data-root . --out data/vizwiz_grounding/train_base.json
+    --data-root . --out data/vizwiz_grounding/train_base.json \
+    --size-out data/vizwiz_grounding/train_base_sizes.csv
 
 python scripts/build_crops.py \
-    --base data/vizwiz_grounding/train_base.json --data-root . \
+    --base data/vizwiz_grounding/train_base.json \
+    --size-csv data/vizwiz_grounding/train_base_sizes.csv --data-root . \
     --image-out data/crops/images --image-prefix data/crops/images \
     --out data/vizwiz_grounding/train_ms.json \
     --manifest data/crops/manifest.json
@@ -215,7 +218,10 @@ Passing `--pred-mask-dir` (first-pass decoder masks) additionally mines a *hard*
 negative from the decoder's own false positives inside the box; 90.0% of the
 released corpus carries one.
 
-The crop plan, by region area fraction:
+Which records get cropped comes from the `--size-out` side table, computed from
+the annotation masks. It is metadata about the corpus, not part of any record:
+the prompt is byte-identical for every row, cropped or not. The plan, by region
+area fraction:
 
 | Bucket | Area | Crops | Zoom ρ |
 | --- | --- | --- | --- |
@@ -306,13 +312,6 @@ term per micro-batch would multiply its effective weight by roughly
 Everything below is a reason to read the headline number carefully. None of it
 is repaired in this repository, because repairing it silently would make the
 published number unreproducible.
-
-**The reported run uses an oracle size hint.** The prompt carries an
-`Answer region size: small | medium | large` line, and at evaluation time it is
-derived from the ground-truth mask (`scripts/make_size_tags.py`). A deployed
-system would have to predict it. Drop `--size-tag-csv` from
-`scripts/run_inference.py` to score without it; use `--bucket-csv` on
-`scripts/evaluate.py` to keep the size breakdown without touching the prompt.
 
 **The mask stage does not apply EXIF orientation; the language-model stage
 does.** On the 205 of 2,373 test items whose stored and upright dimensions

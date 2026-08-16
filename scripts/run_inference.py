@@ -4,7 +4,6 @@
     python scripts/run_inference.py \
         --model-dir checkpoints/qwen3_5_2b_coord_ntl \
         --annotations data/test_grounding.json --image-dir data/test \
-        --size-tag-csv data/size_class_test.csv \
         --out-dir outputs/test --resume
 
 Writes ``responses.jsonl`` (raw, resumable), ``predictions.json`` (parsed) and
@@ -49,7 +48,12 @@ def main() -> int:
         default=None,
         help="recover the prompt from a built dataset instead (asserts it is unique)",
     )
-    parser.add_argument("--size-tag-csv", type=Path, default=None, help="ORACLE size hint injected into the prompt")
+    parser.add_argument(
+        "--bucket-csv",
+        type=Path,
+        default=None,
+        help="image_id,size_class table used to label predictions for reporting; never enters the prompt",
+    )
     parser.add_argument("--template", default="qwen3_5_nothink")
     parser.add_argument("--image-max-pixels", type=int, default=6_553_600)
     parser.add_argument("--cutoff-len", type=int, default=6144)
@@ -68,9 +72,9 @@ def main() -> int:
     else:
         instruction = load_instruction(args.instruction)
 
-    size_by_id = load_size_classes(args.size_tag_csv) if args.size_tag_csv else None
-    if size_by_id:
-        print(f"size hint: {len(size_by_id)} oracle tags will be appended to the prompt")
+    bucket_by_id = load_size_classes(args.bucket_csv) if args.bucket_csv else None
+    if bucket_by_id:
+        print(f"reporting buckets: {len(bucket_by_id)} items labelled (prompt untouched)")
 
     config = GenerationConfig(
         model_dir=args.model_dir,
@@ -95,13 +99,13 @@ def main() -> int:
         args.annotations,
         args.image_dir,
         args.out_dir,
-        size_by_id=size_by_id,
+        bucket_by_id=bucket_by_id,
         limit=args.limit,
         resume=args.resume,
         progress=show,
     )
 
-    items = items_from_annotations(args.annotations, size_by_id)
+    items = items_from_annotations(args.annotations, bucket_by_id)
     if args.limit:
         items = items[: args.limit]
     records = parse_responses(responses, items)
