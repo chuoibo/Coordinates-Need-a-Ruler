@@ -4,7 +4,6 @@
 
 ### Atomic coordinate tokens and a number token loss for VizWiz answer grounding
 
-[![tests](https://github.com/chuoibo/Coordinates-Need-a-Ruler/actions/workflows/tests.yml/badge.svg)](https://github.com/chuoibo/Coordinates-Need-a-Ruler/actions/workflows/tests.yml)
 [![python](https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![weights](https://img.shields.io/badge/weights-Google%20Drive-4285F4?logo=googledrive&logoColor=white)](https://drive.google.com/file/d/1O1QY73AnaHf-uv9Ei2K0f13pA5G2eNZX/view?usp=sharing)
